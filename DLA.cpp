@@ -28,18 +28,18 @@ int main(int argc, char* argv[])
 	//initial alg
 	int square_dimension = 5;
 	printf("started the thingfy\n");
-	vector<DLANode> test = RunDLA_CollisionAttachment(square_dimension, 0.15f, nullptr, 0, false);
+	vector<DLANode> test = RunDLA_CollisionAttachment(square_dimension, 0.2f, nullptr, 0, false);
 	//uchar* pixel_buffer = DLAConfigToPixels(&test, square_dimension);
 
-	int target_dimension = 80;
+	int target_dimension = 320;
 	int cur_dimension = square_dimension;
-	float desired_density = 0.12f;
+	float desired_density = 0.2f;
 	while (cur_dimension < target_dimension)
 	{
 		//desired_density /= 2;
 		cur_dimension *= 2; //double the dimension size and run algorithm again
 		if (cur_dimension >= 160){
-			test = RunDLA_CollisionAttachment(cur_dimension, desired_density, &test, cur_dimension / 2, true);
+			test = RunDLA_CollisionAttachment(cur_dimension, 0.08f, &test, cur_dimension / 2, true);
 		}
 		else {
 			test = RunDLA_CollisionAttachment(cur_dimension, desired_density, &test, cur_dimension / 2, false);
@@ -68,7 +68,7 @@ int main(int argc, char* argv[])
 	//cur_dimension = medium_square;
 
 
-	int bigger_square = 500;
+	int bigger_square = 640;
 	vector<DLANode> test_bigger_canvas = RunDLA_CollisionAttachment(bigger_square, 0.0f, &test, cur_dimension, true);
 	uchar* pixel_buffer = DLAConfigToPixels(&test_bigger_canvas, bigger_square);
 
@@ -211,23 +211,6 @@ vector<DLANode> RunDLA_CollisionAttachment(int grid_dimension, float fill_thresh
 	
 	while (output_configuration.size() < fill_threshold_percentage * pow(grid_dimension, 2))
 	{
-
-		//if avg number of iterations to find collisions is over a certain amount, start sweeping the node across the grid a greater distance 
-		if (total_iteration_accum / nodes_added > 2500) {
-			traversal_sweep_factor = traversal_sweep_factor < 8 ? traversal_sweep_factor * 2 : traversal_sweep_factor; //dont let sweep factor get too big or else it will go crazy wacko mode 
-			//traversal_sweep_factor = 1;
-
-			//reset accumulators so that the average doesn't become desensitized to further changes
-			//total_iteration_accum = 0;
-			//nodes_added = 1;
-		}
-		else if (traversal_sweep_factor > 1){
-			//start reducing the sweep distance if it's getting easier to find good spots to put the thingy
-			traversal_sweep_factor = traversal_sweep_factor / 2;
-			total_iteration_accum = 0;
-			nodes_added = 1;
-		}
-		
 		
 		//randomly generate a starting position in the grid (make sure it doesn't overlap with anything)
 		x_pos = rand() % grid_dimension;
@@ -267,9 +250,28 @@ vector<DLANode> RunDLA_CollisionAttachment(int grid_dimension, float fill_thresh
 
 		//debugs
 		int per_node_iteration_counter = 0; //number of iterations it takes for the node to form a connection 
-		
+		traversal_sweep_factor = traversal_sweep_factor == 1 ? 1 : traversal_sweep_factor / 2;
 		while (!connection_formed)
 		{
+			//if avg number of iterations to find collisions is over a certain amount, start sweeping the node across the grid a greater distance 
+			if (per_node_iteration_counter > 700 * traversal_sweep_factor) {
+				traversal_sweep_factor = traversal_sweep_factor < 64 ? traversal_sweep_factor * 2 : traversal_sweep_factor; //dont let sweep factor get too big or else it will go crazy wacko mode 
+				//traversal_sweep_factor = 1;
+
+				//reset accumulators so that the average doesn't become desensitized to further changes
+				//total_iteration_accum = 0;
+				//nodes_added = 1;
+			}
+			//else if (traversal_sweep_factor > 1) {
+			//	//start reducing the sweep distance if it's getting easier to find good spots to put the thingy
+			//	traversal_sweep_factor = traversal_sweep_factor / 2;
+			//	//reset average to increase sensitivity on new few iterations but only soft reset so its not TOO sensitive 
+			//	//total_iteration_accum = total_iteration_accum / 1.2;
+			//	//nodes_added = nodes_added / 1.2;
+			//}
+
+
+
 			//generate direction for node to move (0=north 1=south 2=east =3west) 
 			desired_move_direction = rand() % 4;
 			sweep_range = ((rand() % traversal_sweep_factor) + 1);
@@ -417,6 +419,9 @@ vector<DLANode> RunDLA_CollisionAttachment(int grid_dimension, float fill_thresh
 
 				per_node_iteration_counter++;
 			}
+
+
+
 
 		}
 
@@ -652,7 +657,7 @@ vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial
 
 		//special situation if the line is "flat" (a cardinal direction) 
 		int jitter_shift_amount; //variable to apply to a horizontal or straight line configuration to slightly shift it's middle points to make it more interesting. If zero, will not make any change to the line.
-		if (delta_x == 0) {
+		if (delta_x == 0 && delta_y > 1) {
 			//line formed is vertically straight 
 			//pick a random amount to shift the middle point of the line  (at most should create an isosolesce triangle with diagonals of slope (1,1)) 
 			jitter_shift_amount = (2 * (rand() % (int)floor(delta_y / 2))) - (int)floor(delta_y / 2);
@@ -663,12 +668,12 @@ vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial
 								*	if generated min value = 0 then 2(0) - 4 = -4 min range
 								*/
 		}
-		else if (delta_y == 0) {
+		else if (delta_y == 0 && delta_x > 1) {
 			//line formed is horizontally straight 
 			jitter_shift_amount = (2 * (rand() % (int)floor(delta_x / 2))) - (int)floor(delta_x / 2);
 		}
 		else {
-			//line is diagonal
+			//line is diagonal or too small to jitter midpoint
 			jitter_shift_amount = 0; //do not involve jitter into horizontal lines I don't wanna think about it thanks
 		}
 
@@ -677,13 +682,19 @@ vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial
 		uint y_pos = dest_node.y_pos;
 		bool gap_filled = false;
 		uint node_inline_index = 1; //ignore first node position because that node already exists (it's the starting node of this line) 
+
+		jitter_shift_amount = 0; //not doing jitter shift rn
 		while (!gap_filled)
 		{
+
+			DLANode new_node; 
+			
 			//depending on which direction has more distance will change how we iterate to next node (if they are the same though it's chilling) 
 			if (delta_x >= delta_y)
 			{
 				//step 1 space at a time in x direction, but only step y direction when slope calls for it 
-				x_pos += x_direction_of_link;
+				//x_pos += x_direction_of_link;
+				x_pos = dest_node.x_pos + (x_direction_of_link * node_inline_index);
 				
 				if (abs(jitter_shift_amount) > 0) //shift y position of elements in this line by some amount
 					//assuming we are working with horizontal lines cause if we aren't then this will get kind of weird 
@@ -695,13 +706,28 @@ vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial
 				}
 				else //shifting y position a predetermined diagonal amount because this line is diagonal
 				{
-					y_pos = dest_node.y_pos + y_direction_of_link * (int)floor(node_inline_index * (1 + (delta_y / delta_x)));
+					y_pos = dest_node.y_pos + y_direction_of_link * (int)floor(node_inline_index * (((float)delta_y / (float)delta_x)));
 				}
+
+				if (node_inline_index == delta_x) {
+					gap_filled = true; //we can do this check because we know for fact that if we added amount of nodes equal to delta x we are donezo 100%
+					//y_pos = dest_node.y_pos + (y_direction_of_link * delta_y);
+					new_node = start_node; //last node should be exactly the start node but pointing to the last node added
+					new_node.parent_connection_idx = index_of_prev_node;
+				}
+				else
+				{
+					uint y_pos_after_random = y_pos + (1 - (rand() % 3));
+					new_node = { 0, x_pos, y_pos_after_random, index_of_prev_node, false };
+				}
+
 			}
 			else
 			{
+
 				//step 1 space at a time in x direction, but only step y direction when slope calls for it 
-				y_pos += y_direction_of_link;
+				//y_pos += y_direction_of_link;
+				y_pos = dest_node.y_pos + (y_direction_of_link * node_inline_index);
 
 				if (abs(jitter_shift_amount) > 0) //shift x position of elements in this line by some amount
 					//assuming we are working with horizontal lines cause if we aren't then this will get kind of weird 
@@ -713,30 +739,48 @@ vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial
 				}
 				else //shifting y position a predetermined diagonal amount because this line is diagonal
 				{
-					x_pos = dest_node.x_pos + x_direction_of_link * (int)floor(node_inline_index * (1 + (delta_x / delta_y)));
+					x_pos = dest_node.x_pos + x_direction_of_link * (int)floor(node_inline_index * (((float)delta_x / (float)delta_y)));
 				}
-			}
-			
-			DLANode new_node = { 0, x_pos, y_pos, index_of_prev_node, false };
 
-			if (x_pos == start_node.x_pos && y_pos == start_node.y_pos)
+				if (node_inline_index == delta_y) {
+					gap_filled = true; //we can do this check because we know for fact that if we added amount of nodes equal to delta y we are donezo 100%
+					//x_pos = dest_node.x_pos + (x_direction_of_link * delta_x);
+					new_node = start_node; //last node should be exactly the start node but pointing to the last node added
+					new_node.parent_connection_idx = index_of_prev_node;
+				}
+				else
+				{
+					uint x_pos_after_random = x_pos + (1 - (rand() % 3));
+					new_node = { 0, x_pos_after_random, y_pos, index_of_prev_node, false };
+				}
+
+			}
+
+			
+
+			//if (x_pos == start_node.x_pos && y_pos == start_node.y_pos)
+			if (gap_filled)
 				//we have reached the end of the line between the two nodes. 
 			{
-				gap_filled = true;
+				//gap_filled = true;
 
 				//now just need to make sure we dont end up re-adding this node to the list (since it may have been identified earlier when we were upscaling) 
 				int last_node_of_the_line = FindDLANodeInList(start_node, &output_configuration);
 				if (last_node_of_the_line != -1)
 				{
 					output_configuration[last_node_of_the_line].parent_connection_idx = index_of_prev_node; //update the parent node index value of this final node)
-
-					break;
+				}
+				else
+				{
+					output_configuration.push_back(new_node);
 				}
 			}
-
-			output_configuration.push_back(new_node);
-			index_of_prev_node = (int)output_configuration.size() - 1;
-			node_inline_index++;
+			else
+			{
+				output_configuration.push_back(new_node);
+				index_of_prev_node = (int)output_configuration.size() - 1;
+				node_inline_index++;
+			}
 
 		}
 	}
