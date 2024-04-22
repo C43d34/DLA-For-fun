@@ -9,6 +9,11 @@
 using namespace std;
 
 
+//When we place a node in DLA or reference it again from upscaling, its value should be changed to reflect how close it is to the center of the configuration 
+const uchar NODE_STARTING_VAL = (uchar)1;
+const uchar NODE_REREF_INC_AMOUNT = (uchar)0; //Adding this value to a node's value every time it is upscaled may make jarring transitions between nodes of different iterations if the difference is large enough 
+
+
 
 int main(int argc, char* argv[])
 {
@@ -28,24 +33,82 @@ int main(int argc, char* argv[])
 	//initial alg
 	int square_dimension = 5;
 	printf("started the thingfy\n");
-	vector<DLANode> test = RunDLA_CollisionAttachment(square_dimension, 0.2f, nullptr, 0, false);
+	vector<DLANode> test = RunDLA_CollisionAttachment(square_dimension, 0.1f, nullptr, 0, false);
 	//uchar* pixel_buffer = DLAConfigToPixels(&test, square_dimension);
 
-	int target_dimension = 320;
+
+
+	int target_dimension = 1280;
 	int cur_dimension = square_dimension;
-	float desired_density = 0.2f;
+	float desired_density = 0.4f;
+
+	cv::Mat blurred_image;
+	int blur_kernel_size = 3;
+	cv::Mat crisp_image;
+	cv::Mat consolidated_image = UpscaleAndBlurDLAImage(DLAConfigToCVMAT(&test, cur_dimension), cur_dimension, cur_dimension*2, 3);
+
+	
 	while (cur_dimension < target_dimension)
 	{
-		//desired_density /= 2;
+		desired_density -= .05;
 		cur_dimension *= 2; //double the dimension size and run algorithm again
-		if (cur_dimension >= 160){
-			test = RunDLA_CollisionAttachment(cur_dimension, 0.08f, &test, cur_dimension / 2, true);
+
+
+		//make upscaled version of the DLA configuration and add more detail before putting it in image format
+		if (cur_dimension >= 80){
+
+
+			//upscale current consolidated image and blur it again 
+			blur_kernel_size += 7;
+			blurred_image = UpscaleAndBlurDLAImage(consolidated_image, cur_dimension / 2, cur_dimension, blur_kernel_size);
+
+			
+			//adding fine details to established structure
+			test = RunDLA_CollisionAttachment(cur_dimension, desired_density, &test, cur_dimension / 2, true);
+		
+			crisp_image = DLAConfigToCVMAT(&test, cur_dimension);
+
+
+			//combine crisp and blurry into a consolidated image 
+			consolidated_image = crisp_image /*+ blurred_image*/;
+		
 		}
-		else {
+		else { 
+
+
+			//building initial structure 
 			test = RunDLA_CollisionAttachment(cur_dimension, desired_density, &test, cur_dimension / 2, false);
 
+			//cv::resize(consolidated_image, consolidated_image, cv::Size(cur_dimension, cur_dimension));
+			//consolidated_image += DLAConfigToCVMAT(&test, cur_dimension);
+			//consolidated_image += UpscaleAndBlurDLAImage(DLAConfigToCVMAT(&test, cur_dimension), cur_dimension, cur_dimension, blur_kernel_size);
+			consolidated_image = 5 * DLAConfigToCVMAT(&test, cur_dimension);
 		}
+
+
+
+		//DisplayDLAConfigAndWait(test, cur_dimension);
+
+		cv::namedWindow("Display Window", cv::WINDOW_FREERATIO);
+		cv::imshow("Display Window", consolidated_image);
+		int response = cv::waitKey(0);
+
 	}
+
+	chrono::duration<double> elapsed_seconds = chrono::system_clock::now() - start_time;
+	printf("finished the thingy\n (elapsed seconds = %f)\n::: displaying output\n", elapsed_seconds.count());
+
+
+	//cv::namedWindow("Display Window", cv::WINDOW_FREERATIO);
+	//cv::imshow("Display Window", the_zongler);
+	//int response = cv::waitKey(0);
+
+	//if (response == 's')
+	//{
+	//	cv::imwrite("output.png", x);
+	//}
+
+
 
 
 	//uchar* pixel_buffer = DLAConfigToPixels(&test, cur_dimension);
@@ -62,28 +125,29 @@ int main(int argc, char* argv[])
 	//}
 
 
-	//test upscaling
-	//int medium_square = 160;
-	//test = RunDLA_CollisionAttachment(medium_square, 0.0f, &test, cur_dimension, true);
-	//cur_dimension = medium_square;
-
-
-	int bigger_square = 640;
-	vector<DLANode> test_bigger_canvas = RunDLA_CollisionAttachment(bigger_square, 0.0f, &test, cur_dimension, true);
-	uchar* pixel_buffer = DLAConfigToPixels(&test_bigger_canvas, bigger_square);
 
 
 
-	chrono::duration<double> elapsed_seconds = chrono::system_clock::now() - start_time;
-	printf("finished the thingy\n (elapsed seconds = %f)\n::: displaying output\n", elapsed_seconds.count());
+
+//LARGE UPSCALE PASS
+	//int bigger_square = 640;
+	//cv::Mat empty;
+
+	//cv::Mat blurred_image = UpscaleAndBlurDLAImage(DLAConfigToPixels(&test, cur_dimension), cur_dimension, bigger_square, 7);
+	//vector<DLANode> test_bigger_canvas = RunDLA_CollisionAttachment(bigger_square, 0.0f, &test, cur_dimension, true);
+	//uchar* pixel_buffer = DLAConfigToPixels(&test_bigger_canvas, bigger_square);
+	//cv::Mat the_zongler = BuildDLAHeightmap(pixel_buffer, blurred_image, bigger_square, empty);
+
+
+
 
 
 	////openCV imaging stuff
-	cv::Mat x(bigger_square, bigger_square, CV_8UC1, cv::Scalar(0)); //10x10 1 channel 8bit unsigned matrix, autofilled with pixels with value "0"
-	std::memcpy(x.data, pixel_buffer, pow(bigger_square,2) * sizeof(uchar)); //copy pixel buffer into the cv::Mat datatype so we can display an image
-	//cv::resize(x, x, cv::Size(), 2, 2);
-	//cv::blur(x, x, cv::Size(15, 15));
-	free(pixel_buffer); //empty out pixel buffer assuming we don't need it anymore 
+	//cv::Mat x(bigger_square, bigger_square, CV_8UC1, cv::Scalar(0)); //10x10 1 channel 8bit unsigned matrix, autofilled with pixels with value "0"
+	//std::memcpy(x.data, pixel_buffer, pow(bigger_square,2) * sizeof(uchar)); //copy pixel buffer into the cv::Mat datatype so we can display an image
+	////cv::resize(x, x, cv::Size(), 2, 2);
+	////cv::blur(x, x, cv::Size(15, 15));
+	//free(pixel_buffer); //empty out pixel buffer assuming we don't need it anymore 
 
 
 
@@ -93,9 +157,9 @@ int main(int argc, char* argv[])
 	//cv::blur(resized, resized, cv::Size(15, 15));
 	//cv::GaussianBlur(resized, resized, cv::Size(21, 21), 1.5, 1.5);
 
-	cv::namedWindow("Display Window", cv::WINDOW_FREERATIO);
-	cv::imshow("Display Window", x);
-	int response = cv::waitKey(0);
+	//cv::namedWindow("Display Window", cv::WINDOW_FREERATIO);
+	//cv::imshow("Display Window", the_zongler);
+	//int response = cv::waitKey(0);
 
 	//if (response == 's')
 	//{
@@ -188,6 +252,7 @@ vector<DLANode> RunDLA_CollisionAttachment(int grid_dimension, float fill_thresh
 				DLANode temp_node = output_configuration[i];
 				temp_node.x_pos += position_shift_amount;
 				temp_node.y_pos += position_shift_amount;
+				temp_node.val += NODE_REREF_INC_AMOUNT; //everytime a node is re-referenced during an upscale, it's value increases 
 				output_configuration[i] = temp_node;
 			}
 		}
@@ -196,13 +261,13 @@ vector<DLANode> RunDLA_CollisionAttachment(int grid_dimension, float fill_thresh
 	else
 	{
 	//pick a midpoint within the grid to place the first node
-		DLANode first_node = {(uchar)0, (uint)(grid_dimension / 2),(uint)(grid_dimension / 2), -1, false };
+		DLANode first_node = {NODE_STARTING_VAL, (uint)(grid_dimension / 2),(uint)(grid_dimension / 2), -1, false };
 		output_configuration.push_back(first_node);
 	}
 
 //main alg loop ::: is fill threshold percentage satisfied?
-	uint x_pos;
-	uint y_pos;
+	int x_pos;
+	int y_pos;
 	uchar traversal_sweep_factor = 1; //use this variable to scale how much we move the nodes when looking for places to put it 
 	
 	//debugs
@@ -238,7 +303,7 @@ vector<DLANode> RunDLA_CollisionAttachment(int grid_dimension, float fill_thresh
 		}
 
 		//intialize a new node at the starting position
-		DLANode new_node = { (uchar)0, x_pos, y_pos, -1, true }; //true because this node will be a leaf node
+		DLANode new_node = {NODE_STARTING_VAL, x_pos, y_pos, -1, true }; //true because this node will be a leaf node
 
 		//loop until found a spot for this node to connect to
 		uchar desired_move_direction;       //(0 = north 1 = south 2 = east 3 = west)
@@ -255,7 +320,7 @@ vector<DLANode> RunDLA_CollisionAttachment(int grid_dimension, float fill_thresh
 		{
 			//if avg number of iterations to find collisions is over a certain amount, start sweeping the node across the grid a greater distance 
 			if (per_node_iteration_counter > 700 * traversal_sweep_factor) {
-				traversal_sweep_factor = traversal_sweep_factor < 64 ? traversal_sweep_factor * 2 : traversal_sweep_factor; //dont let sweep factor get too big or else it will go crazy wacko mode 
+				//traversal_sweep_factor = traversal_sweep_factor < 64 ? traversal_sweep_factor * 2 : traversal_sweep_factor; //dont let sweep factor get too big or else it will go crazy wacko mode 
 				//traversal_sweep_factor = 1;
 
 				//reset accumulators so that the average doesn't become desensitized to further changes
@@ -278,8 +343,8 @@ vector<DLANode> RunDLA_CollisionAttachment(int grid_dimension, float fill_thresh
 
 			//check for collision in given direction
 				//x,y position where we will check for something present. If there is something at this location, then our new node will collide into it
-			int looking_for_collision_at_x = new_node.x_pos;
-			int looking_for_collision_at_y = new_node.y_pos;
+			int looking_for_collision_at_x = (int)new_node.x_pos;
+			int looking_for_collision_at_y = (int)new_node.y_pos;
 
 
 			switch (desired_move_direction)
@@ -304,6 +369,24 @@ vector<DLANode> RunDLA_CollisionAttachment(int grid_dimension, float fill_thresh
 				x_axis_move_direction = true;
 				direction_sign = -1;
 				break;
+			
+			//Adding experimental diagonal case so we dont have to rely on jitter to create diagonal connections 
+			//case 4: //north east
+			//	looking_for_collision_at_y -= 1;
+			//	looking_for_collision_at_x += 1;
+			//	break;
+			//case 5: //south east
+			//	looking_for_collision_at_y += 1;
+			//	looking_for_collision_at_x += 1;
+			//	break;
+			//case 6: //south west
+			//	looking_for_collision_at_y += 1;
+			//	looking_for_collision_at_x -= 1;
+			//	break;
+			//case 7: //north west
+			//	looking_for_collision_at_y -= 1;
+			//	looking_for_collision_at_x -= 1;
+			//	break;
 			default:
 				printf("HUH? How did you fuck up generating a number from 0 to 3 ");
 				break;
@@ -311,104 +394,126 @@ vector<DLANode> RunDLA_CollisionAttachment(int grid_dimension, float fill_thresh
 
 
 			//Sweep along a given direction and look for all nodes along the sweep that could cause a collision 
-			if (x_axis_move_direction)
-			{
-				for (int i = 0; i < output_configuration.size(); i++)
-				{
-					if (direction_sign * (output_configuration[i].x_pos - looking_for_collision_at_x) <= 0 && output_configuration[i].y_pos == looking_for_collision_at_y)
-						//collision found along path we were sweeping in
-					{
-					//Test if this node is the closest possible node that we can collide with
-
-						if (direction_sign * (output_configuration[i].x_pos - new_node.x_pos) == 1)
-							//collided node is only 1 space away from the new node, so it has to be da one
-						{
-							closest_node_index = i;
-							break; //break from collision search early because we are certain this is it
-
-						}
-						else if (closest_node_index > -1)
-							//node *could* be the closest possible node so we will keep track of it incase it is. 
-						{
-							if (direction_sign * (output_configuration[closest_node_index].x_pos - output_configuration[i].x_pos) > 0)
-								//found node that is closer collision but there could possibly be a node even closer that we haven't found along the sweep, so keep searchinbg
-							{
-								closest_node_index = i;
-							}
-						}
-						else {
-							closest_node_index = i;
-						}
-					}
-				}
-			}
-			else
-			{
-				for (int i = 0; i < output_configuration.size(); i++)
-				{
-					if (output_configuration[i].x_pos == looking_for_collision_at_x && direction_sign * (output_configuration[i].y_pos - looking_for_collision_at_y) <= 0)
-						//collision found along path we were sweeping in 
-					{
-					//Test if this node is the closest possible node that we can collide with
-
-						if (direction_sign * (output_configuration[i].y_pos - new_node.y_pos) == 1)
-							//collided node is only 1 space away from the new node, so it has to be da one
-						{
-							closest_node_index = i;
-							break; //break from collision search early because we are certain this is it
-						
-						}
-						else if (closest_node_index > -1)
-							//node *could* be the closest possible node so we will keep track of it incase it is. 
-						{
-							if (direction_sign * (output_configuration[closest_node_index].x_pos - output_configuration[i].x_pos) > 0)
-								//found node that is closer collision but there could possibly be a node even closer that we haven't found along the sweep, so keep searchinbg
-							{
-								closest_node_index = i;
-							}
-						}
-						else {
-							closest_node_index = i;
-						}
-					}
-				}
-			}
-
-
-			//OLD COLLISION CHECK ONLY CONSIDERING MOVEMENT 1 SPACE AT A TIME INSTEAD OF SWEEP
-			////if collides, create attachment (add to output configuration) 
-			//for (int i = 0; i < output_configuration.size(); i++)
+			//if (x_axis_move_direction)
 			//{
-			//	if (output_configuration[i].x_pos == looking_for_collision_at_x && output_configuration[i].y_pos == looking_for_collision_at_y)
-			//		//collision found because something is present in the location we were trying to move in
+			//	for (int i = 0; i < output_configuration.size(); i++)
 			//	{
-			//		new_node.parent_connection_idx = i;
-			//		output_configuration.push_back(new_node);
-			//		connection_formed = true;
+			//		if (direction_sign * ((int)output_configuration[i].x_pos - looking_for_collision_at_x) <= 0 && output_configuration[i].y_pos == looking_for_collision_at_y)
+			//			//collision found along path we were sweeping in
+			//		{
+			//		//Test if this node is the closest possible node that we can collide with
 
-			//		//make sure connected node is no longer treated as a leaf node
-			//		output_configuration[i].is_leaf = false;
-			//		break;
+			//			if (direction_sign  * (output_configuration[i].x_pos - new_node.x_pos) == 1)
+			//				//collided node is only 1 space away from the new node, so it has to be da one
+			//			{
+			//				closest_node_index = i;
+			//				break; //break from collision search early because we are certain this is it
+
+			//			}
+			//			else if (closest_node_index > -1)
+			//				//node *could* be the closest possible node so we will keep track of it incase it is. 
+			//			{
+			//				if (direction_sign * (int)((int)output_configuration[closest_node_index].x_pos - (int)output_configuration[i].x_pos) > 0)
+			//					//found node that is closer collision but there could possibly be a node even closer that we haven't found along the sweep, so keep searchinbg
+			//				{
+			//					closest_node_index = i;
+			//				}
+			//			}
+			//			else {
+			//				closest_node_index = i;
+			//			}
+			//		}
+			//	}
+			//}
+			//else
+			//{
+			//	for (int i = 0; i < output_configuration.size(); i++)
+			//	{
+			//		if (output_configuration[i].x_pos == looking_for_collision_at_x && direction_sign * (output_configuration[i].y_pos - looking_for_collision_at_y) <= 0)
+			//			//collision found along path we were sweeping in 
+			//		{
+			//		//Test if this node is the closest possible node that we can collide with
+
+			//			if (direction_sign * (output_configuration[i].y_pos - new_node.y_pos) == 1)
+			//				//collided node is only 1 space away from the new node, so it has to be da one
+			//			{
+			//				closest_node_index = i;
+			//				break; //break from collision search early because we are certain this is it
+			//			
+			//			}
+			//			else if (closest_node_index > -1)
+			//				//node *could* be the closest possible node so we will keep track of it incase it is. 
+			//			{
+			//				if (direction_sign * (int)((int)output_configuration[closest_node_index].y_pos - (int)output_configuration[i].y_pos) > 0)
+			//					//found node that is closer collision but there could possibly be a node even closer that we haven't found along the sweep, so keep searchinbg
+			//				{
+			//					closest_node_index = i;
+			//				}
+			//			}
+			//			else {
+			//				closest_node_index = i;
+			//			}
+			//		}
 			//	}
 			//}
 
 
-			//TERMINATION CONDITION (connection formed)
-			// Pick the closest node to collide with found and form connection (no node was found if closest node index is -1 ) 
-			if (closest_node_index > -1)
+			//OLD COLLISION CHECK ONLY CONSIDERING MOVEMENT 1 SPACE AT A TIME INSTEAD OF SWEEP
+			////if collides, create attachment (add to output configuration) 
+			for (int i = 0; i < output_configuration.size(); i++)
 			{
-				new_node.parent_connection_idx = closest_node_index;
-				new_node.x_pos = x_axis_move_direction ? output_configuration[closest_node_index].x_pos - (direction_sign) : new_node.x_pos;
-				new_node.y_pos = !x_axis_move_direction ? output_configuration[closest_node_index].y_pos - (direction_sign) : new_node.y_pos;
-				output_configuration.push_back(new_node);
+				if (output_configuration[i].x_pos == looking_for_collision_at_x && output_configuration[i].y_pos == looking_for_collision_at_y)
+					//collision found because something is present in the location we were trying to move in
+				{
+					new_node.parent_connection_idx = i;
+					output_configuration.push_back(new_node);
+					connection_formed = true;
 
-				//make sure connected node is no longer treated as a leaf node
-				output_configuration[closest_node_index].is_leaf = false;
-
-				connection_formed = true; //terminates loop
+					//make sure connected node is no longer treated as a leaf node
+					output_configuration[i].is_leaf = false;
+					break;
+				}
 			}
-			else
-			{
+
+
+			////TERMINATION CONDITION (connection formed)
+			//// Pick the closest node to collide with found and form connection (no node was found if closest node index is -1 ) 
+			//if (closest_node_index > -1)
+			//{
+			//	DLANode test_node = { 1,
+			//		x_axis_move_direction ? output_configuration[closest_node_index].x_pos - (direction_sign) : new_node.x_pos ,
+			//		!x_axis_move_direction ? output_configuration[closest_node_index].y_pos - (direction_sign) : new_node.y_pos,
+			//		-1, false };
+
+			//	int test = FindDLANodeInList(test_node, &output_configuration);
+			//	if (test != -1) {
+			//		printf("VERYBAD");
+			//	}
+
+
+			//	new_node.parent_connection_idx = closest_node_index;
+			//	new_node.x_pos = x_axis_move_direction ? output_configuration[closest_node_index].x_pos - (direction_sign) : new_node.x_pos;
+			//	new_node.y_pos = !x_axis_move_direction ? output_configuration[closest_node_index].y_pos - (direction_sign) : new_node.y_pos;
+			//	output_configuration.push_back(new_node);
+
+
+			//	//make sure connected node is no longer treated as a leaf node
+			//	output_configuration[closest_node_index].is_leaf = false;
+
+			//	connection_formed = true; //terminates loop
+
+			//	if (x_axis_move_direction && output_configuration[new_node.parent_connection_idx].y_pos != new_node.y_pos)
+			//	{
+			//		printf("glam\n");
+			//	}
+			//	else if (!x_axis_move_direction && output_configuration[new_node.parent_connection_idx].x_pos != new_node.x_pos)
+			//	{
+			//		printf("glam\n");
+			//	}
+
+			//}
+			//else
+			//{
 				//otherwise, move the node in the earlier given direction (as long as it is inside grid boundaries btw) 
 				if (looking_for_collision_at_x >= 0 && looking_for_collision_at_x < grid_dimension) {
 					new_node.x_pos = looking_for_collision_at_x;
@@ -416,9 +521,8 @@ vector<DLANode> RunDLA_CollisionAttachment(int grid_dimension, float fill_thresh
 				if (looking_for_collision_at_y >= 0 && looking_for_collision_at_y < grid_dimension) {
 					new_node.y_pos = looking_for_collision_at_y;
 				}
-
 				per_node_iteration_counter++;
-			}
+			//}
 
 
 
@@ -428,10 +532,25 @@ vector<DLANode> RunDLA_CollisionAttachment(int grid_dimension, float fill_thresh
 		total_iteration_accum += per_node_iteration_counter;
 		nodes_added++; 
 		//printf("DLA list so far....\n");
-		printf("size:%d, nodes:%d, fill perc:%.2f, iters this node: %*d ", grid_dimension, (int)output_configuration.size(), output_configuration.size()/pow(grid_dimension, 2), 7, per_node_iteration_counter);
+		printf("size:%d, nodes:%d, fill perc:%.2f/%.2f, iters this node: %*d ", grid_dimension, (int)output_configuration.size(), output_configuration.size()/pow(grid_dimension, 2), fill_threshold_percentage, 7, per_node_iteration_counter);
 		printf("Running avg... %d::: traversal factor... %d::: \n", total_iteration_accum / nodes_added, traversal_sweep_factor);
 
 	}
+
+
+
+	//Recompute value of each node in the configuration.
+		//Leaf nodes should have the smallest value and the closer to the root node will yield a larger value 
+	for (int i = 0; i < output_configuration.size(); i++)
+	{
+		if (output_configuration[i].is_leaf == true) {
+			PropagateValueUpParents(&output_configuration, i);
+			printf("%d/%d\n", i, (int)output_configuration.size());
+		}
+	}
+
+
+
 
 	if (nodes_added > 0) {
 		printf("Average number of iteration it took for a node to form a connection %d \n", total_iteration_accum / nodes_added);
@@ -475,13 +594,13 @@ vector<DLANode> RunDLA_StickyAttachment(int grid_dimension, float fill_threshold
 	else
 	{
 		//pick a midpoint within the grid to place the first node
-		DLANode first_node = { (uchar)0, (uint)(grid_dimension / 2),(uint)(grid_dimension / 2), -1, false };
+		DLANode first_node = { (uchar)0, (int)(grid_dimension / 2),(int)(grid_dimension / 2), -1, false };
 		output_configuration.push_back(first_node);
 	}
 
 	//main alg loop ::: is fill threshold percentage satisfied?
-	uint x_pos;
-	uint y_pos;
+	int x_pos;
+	int y_pos;
 	while (output_configuration.size() < fill_threshold_percentage * pow(grid_dimension, 2))
 	{
 		//randomly generate a position in the grid (make sure it doesn't overlap with anything)
@@ -622,6 +741,7 @@ vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial
 		DLANode temp_node = initial_configuration->at(i);
 		temp_node.x_pos *= upscale_factor;
 		temp_node.y_pos *= upscale_factor;
+		temp_node.val += NODE_REREF_INC_AMOUNT; //everytime a node is re-referenced during an upscale, it's value increases 
 
 		temp_output_configuration[i] = temp_node;
 	}
@@ -634,8 +754,8 @@ vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial
 	for (int i = 1; i < temp_output_configuration.size(); i++) //there should be n-1 connections between all the current nodes (each node is only connected to 1 other node)
 	{
 		//these two nodes form a "line" that needs to be populated inside the new upscaled grid
-		DLANode start_node = temp_output_configuration[i];
-		DLANode dest_node = temp_output_configuration[start_node.parent_connection_idx];
+		DLANode start_node = temp_output_configuration[i]; //line child node
+		DLANode dest_node = temp_output_configuration[start_node.parent_connection_idx]; //line parent node 
 
 
 	//Start from the destination node and add nodes up to the start node (mini DLA algorithm) ((we do it in reverse since the start node is a child node and the desination node is the parent node in reality. We only have connection from child to parent which is why we identify the "start" as the child)) 
@@ -646,6 +766,9 @@ vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial
 		{
 			output_configuration.push_back(dest_node);
 			index_of_prev_node = (int)output_configuration.size() - 1;
+			//if (NodeCycleCheck(output_configuration, output_configuration.size() - 1)) {
+			//	printf("GALMBO");
+			//}
 		}
 
 		//we want these to be either 0 or +/-1 to show the direction that the link will move in (north, south, east, or west, depending on combination of x and y)
@@ -678,8 +801,8 @@ vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial
 		}
 
 		//current position as we step along the line and place nodes (start at destination and step towards start as noted in earlier comment)  
-		uint x_pos = dest_node.x_pos;
-		uint y_pos = dest_node.y_pos;
+		int x_pos = dest_node.x_pos;
+		int y_pos = dest_node.y_pos;
 		bool gap_filled = false;
 		uint node_inline_index = 1; //ignore first node position because that node already exists (it's the starting node of this line) 
 
@@ -717,8 +840,17 @@ vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial
 				}
 				else
 				{
-					uint y_pos_after_random = y_pos + (1 - (rand() % 3));
-					new_node = { 0, x_pos, y_pos_after_random, index_of_prev_node, false };
+
+
+					while (true)
+					{
+						int y_pos_after_random = y_pos + (1 - (rand() % 3));
+						y_pos_after_random = y_pos; //negate random jittering (debugging)
+						new_node = { dest_node.val, x_pos, y_pos_after_random, index_of_prev_node, false };
+						if (FindDLANodeInList(new_node, &output_configuration) == -1) {
+							break;
+						}
+					}
 				}
 
 			}
@@ -737,7 +869,7 @@ vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial
 
 					x_pos = dest_node.x_pos + (int)(slope * abs(abs((int)(line_middle_index - (node_inline_index))) - line_middle_index));
 				}
-				else //shifting y position a predetermined diagonal amount because this line is diagonal
+				else //shifting x position a predetermined diagonal amount because this line is diagonal
 				{
 					x_pos = dest_node.x_pos + x_direction_of_link * (int)floor(node_inline_index * (((float)delta_x / (float)delta_y)));
 				}
@@ -750,8 +882,15 @@ vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial
 				}
 				else
 				{
-					uint x_pos_after_random = x_pos + (1 - (rand() % 3));
-					new_node = { 0, x_pos_after_random, y_pos, index_of_prev_node, false };
+					while(true)
+					{
+						int x_pos_after_random = x_pos + (1 - (rand() % 3));
+						x_pos_after_random = x_pos; //negate random jittering (debugging)
+						new_node = { dest_node.val, x_pos_after_random, y_pos, index_of_prev_node, false };
+						if (FindDLANodeInList(new_node, &output_configuration) == -1) {
+							break;
+						}
+					}
 				}
 
 			}
@@ -769,17 +908,47 @@ vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial
 				if (last_node_of_the_line != -1)
 				{
 					output_configuration[last_node_of_the_line].parent_connection_idx = index_of_prev_node; //update the parent node index value of this final node)
+
+					if (NodeCycleCheck(output_configuration, last_node_of_the_line)) {
+						printf("GALMBO");
+					}
 				}
 				else
 				{
 					output_configuration.push_back(new_node);
+
+					if (NodeCycleCheck(output_configuration, output_configuration.size() - 1)) {
+						printf("GALMBO");
+					}
 				}
+
+
+
 			}
 			else
 			{
-				output_configuration.push_back(new_node);
-				index_of_prev_node = (int)output_configuration.size() - 1;
+				int next_node_exists_at = FindDLANodeInList(new_node, &output_configuration);
+				if (next_node_exists_at != -1) {
+					output_configuration[next_node_exists_at].parent_connection_idx = index_of_prev_node;
+					int saved = index_of_prev_node;
+					index_of_prev_node = next_node_exists_at;
+
+					if (NodeCycleCheck(output_configuration, index_of_prev_node)) {
+						printf("GALMBO");
+					}
+				}
+				else
+				{
+					output_configuration.push_back(new_node);
+					index_of_prev_node = (int)output_configuration.size() - 1;
+
+					if (NodeCycleCheck(output_configuration, output_configuration.size() - 1)) {
+						printf("GALMBO");
+					}
+				}
 				node_inline_index++;
+
+
 			}
 
 		}
@@ -787,6 +956,78 @@ vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial
 
 	return output_configuration;
 }
+
+
+
+
+void PropagateValueUpParents(vector<DLANode>* dla_configuration, int child_node_index)
+{
+	int current_node_index = child_node_index;
+	int current_node_parent_index = dla_configuration->at(child_node_index).parent_connection_idx; 
+
+
+	uchar value_to_assign_to_node = NODE_STARTING_VAL;
+	uchar increase_value_every_next_parent_by = 1; 
+	while (current_node_parent_index != -1)
+	{
+		//printf("%d\n", current_node_index);
+		uchar node_value = dla_configuration->at(current_node_index).val;
+		if (node_value < value_to_assign_to_node) {
+			dla_configuration->at(current_node_index).val = value_to_assign_to_node;
+		}
+
+
+		//move up parent node of the current node 
+		current_node_index = current_node_parent_index;
+		current_node_parent_index = dla_configuration->at(current_node_index).parent_connection_idx;
+
+		if (value_to_assign_to_node > 254) {
+			value_to_assign_to_node = 255;
+			printf("Value bigbig %d\n", current_node_index);
+		}
+		else {
+			value_to_assign_to_node += increase_value_every_next_parent_by;
+		}
+
+	}
+
+	//reached root node (current node's parent index = -1)
+	uchar node_value = dla_configuration->at(current_node_index).val;
+	if (node_value < value_to_assign_to_node) {
+		dla_configuration->at(current_node_index).val = value_to_assign_to_node;
+	}
+}
+
+
+
+
+bool NodeCycleCheck(vector<DLANode> dla_configuration, int starting_node_index)
+{
+	int current_node_index = starting_node_index;
+	int current_node_parent = dla_configuration[starting_node_index].parent_connection_idx;
+	int debug = 0;
+	while (current_node_parent != -1)
+	{
+		//printf("%d\n", current_node_index);
+		//cycle identified
+		if (current_node_parent == starting_node_index) {
+			return true;
+		}
+		current_node_index = current_node_parent;
+		current_node_parent = dla_configuration[current_node_index].parent_connection_idx;
+
+		debug++;
+		if (debug > dla_configuration.size()) {
+			printf("HUH\n");
+			break;
+		}
+
+	}
+
+	//if gone through whole loop and no cycle was identified, then no cycle :) 
+	return false;
+}
+
 
 
 
@@ -806,7 +1047,8 @@ uchar* DLAConfigToPixels(vector<DLANode>* dla_configuration, int grid_dimension)
 		pixel_x_pos = dla_configuration->at(i).x_pos;
 		pixel_y_pos = dla_configuration->at(i).y_pos;
 
-		array_of_pixels[(pixel_y_pos * grid_dimension) + pixel_x_pos] = (uchar)255; //or ->at(i).val; but we aren't really using that just yet (TODO)
+		//array_of_pixels[(pixel_y_pos * grid_dimension) + pixel_x_pos] = (uchar)30; //or ->at(i).val; but we aren't really using that just yet (TODO)
+		array_of_pixels[(pixel_y_pos * grid_dimension) + pixel_x_pos] = dla_configuration->at(i).val;
 	}
 
 	return array_of_pixels;
@@ -814,9 +1056,28 @@ uchar* DLAConfigToPixels(vector<DLANode>* dla_configuration, int grid_dimension)
 
 
 
-cv::Mat BuildDLAHeightmap(uchar* crisp_dla_pixel_image, cv::Mat initial_dla_image)
+cv::Mat DLAConfigToCVMAT(vector<DLANode>* dla_configuration, int grid_dimension)
 {
-	return cv::Mat();
+	uchar* dla_as_pixels = DLAConfigToPixels(dla_configuration, grid_dimension);
+
+	cv::Mat x(grid_dimension, grid_dimension, CV_8UC1, cv::Scalar(0)); //10x10 1 channel 8bit unsigned matrix, autofilled with pixels with value "0"
+	std::memcpy(x.data, dla_as_pixels, pow(grid_dimension,2) * sizeof(uchar)); //copy pixel buffer into the cv::Mat datatype so we can display an image
+	
+	return x; 
+}
+
+
+
+
+cv::Mat UpscaleAndBlurDLAImage(cv::Mat crisp_dla_pixel_image, int pixel_image_dim, int upscale_dim, int blur_filter_size)
+{
+	cv::Mat newly_blurred_image(upscale_dim, upscale_dim, CV_8UC1, cv::Scalar(0)); 
+	cv::resize(crisp_dla_pixel_image, newly_blurred_image, cv::Size(upscale_dim, upscale_dim));
+
+	cv::blur(newly_blurred_image, newly_blurred_image, cv::Size(blur_filter_size, blur_filter_size));
+
+
+	return newly_blurred_image;
 }
 
 
@@ -826,13 +1087,49 @@ int FindDLANodeInList(DLANode node, vector<DLANode>* dla_configuration_list)
 {
 	uint x_pos = node.x_pos;
 	uint y_pos = node.y_pos;
+	
+	bool found_node = false;
+	int x;
 	for (int i = 0; i < dla_configuration_list->size(); i++)
 	{
 		if (dla_configuration_list->at(i).x_pos == x_pos && dla_configuration_list->at(i).y_pos == y_pos) {
-			return i;
+			//return i;
+			if (found_node) {
+				printf("Node overlap :O\n");
+			}
+			else {
+				found_node = true;
+				x = i;
+			}
 		}
+
 	}
+
+	if (found_node) {
+		return x;
+	}
+
+
 	return -1;
+}
+
+
+
+
+void DisplayDLAConfigAndWait(vector<DLANode> dla_configuration, int dla_configuration_dim)
+{
+	uchar* pixel_buffer = DLAConfigToPixels(&dla_configuration, dla_configuration_dim);
+
+	////openCV imaging stuff
+	cv::Mat img(dla_configuration_dim, dla_configuration_dim, CV_8UC1, cv::Scalar(0)); //10x10 1 channel 8bit unsigned matrix, autofilled with pixels with value "0"
+	std::memcpy(img.data, pixel_buffer, (size_t)pow(dla_configuration_dim, 2) * sizeof(uchar)); //copy pixel buffer into the cv::Mat datatype so we can display an image
+	free(pixel_buffer); //empty out pixel buffer assuming we don't need it anymore 
+
+
+	cv::namedWindow("Display Window", cv::WINDOW_FREERATIO);
+	cv::imshow("Display Window", img);
+	int response = cv::waitKey(0);
+
 }
 
 

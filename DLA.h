@@ -20,8 +20,8 @@ uchar* GenerateRandomImage(int image_height, int image_width);
 
 struct DLANode {
 	uchar val;
-	uint x_pos;
-	uint y_pos;
+	int x_pos;
+	int y_pos;
 	int parent_connection_idx; //contains an list/vector index corresponding to the DLANode that this node is attached to. (-1 would be root node) 
 	//DLANode* parent; //if nullptr then is the root node
 	//could have a children field but do we really need it nahhh
@@ -55,6 +55,20 @@ vector<DLANode> RunDLA_StickyAttachment(int grid_dimension, float fill_threshold
 vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial_configuration, int starting_config_dimensions);
 
 
+
+/*
+* Takes a given node (usually a leaf node) within a dla configuration and adds value to each parent up the connection.
+* Continues to do so until root node of the configuration is reached 
+* 
+* If current value of parent is already greater than added value, will take the larger value 
+*/
+void PropagateValueUpParents(vector<DLANode>* dla_configuration, int child_node_index);
+
+
+//Does this node inside the configuration exist inside a cycle?
+bool NodeCycleCheck(vector<DLANode> dla_configuration, int starting_node_index);
+
+
 /*
 //Builds a M x M array (dimensions specified in parameter) of pixels.
 * 
@@ -63,8 +77,21 @@ vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial
 uchar* DLAConfigToPixels(vector<DLANode>* dla_configuration, int grid_dimension);
 
 
-//Combines crisp dla pixeled image with a blurred version and an optional pre-calculated imaged provided in parameter.
-cv::Mat BuildDLAHeightmap(uchar* crisp_dla_pixel_image, cv::Mat initial_dla_image);
+/*
+* Build a cv::Mat type image out of DLA configuration 
+* - single channel black and while image
+* 
+* Uses DLAConfigToPixels() to handle the values of each node when converting to pixels 
+*/
+cv::Mat DLAConfigToCVMAT(vector<DLANode>* dla_configuration, int grid_dimension);
+
+
+
+/* 
+* //Directly upscales a dla image to the specified upscale dimension using opencv (square images only)
+* //Then applies an average filter blur
+*/
+cv::Mat UpscaleAndBlurDLAImage(cv::Mat crisp_dla_pixel_image, int pixel_image_dim, int upscale_dim, int blur_filter_size);
 
 
 /*
@@ -73,3 +100,8 @@ cv::Mat BuildDLAHeightmap(uchar* crisp_dla_pixel_image, cv::Mat initial_dla_imag
 * makes search comparison based on (x,y) coordinates of the DLANode
 */
 int FindDLANodeInList(DLANode node, vector<DLANode>* dla_configuration_list);
+
+
+
+
+void DisplayDLAConfigAndWait(vector<DLANode> dla_configuration, int dla_configuration_dim);
