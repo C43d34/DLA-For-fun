@@ -29,6 +29,14 @@ struct DLANode {
 };
 
 
+struct DLALine {
+	int x_pos_start;
+	int y_pos_start;
+	int x_pos_end;
+	int y_pos_end;
+};
+
+
 /*
 //Run Diffusion Limited Aggregation algorithm
 *
@@ -41,7 +49,11 @@ struct DLANode {
 * This version of the algorithm utilizes collision attachment to attaches node together (other version is Sticky Attachment) 
 * 
 */
-vector<DLANode> RunDLA_CollisionAttachment(int grid_dimension, float fill_threshold_percentage, vector<DLANode>* initial_configuration, int starting_config_dimensions, bool should_upscale_initial_config);
+vector<DLANode> DEPRRunDLA_CollisionAttachment(int grid_dimension, float fill_threshold_percentage, vector<DLANode>* initial_configuration, int starting_config_dimensions, bool should_upscale_initial_config);
+
+
+vector<DLANode> RunDLA_CollisionAttachment(int grid_dimension, float fill_threshold_percentage, vector<DLANode>* initial_configuration, vector<DLALine>* initial_line_configuration, int starting_config_dimensions, bool should_upscale_initial_config);
+
 
 
 vector<DLANode> RunDLA_StickyAttachment(int grid_dimension, float fill_threshold_percentage, vector<DLANode>* initial_configuration, int starting_config_dimensions, bool should_upscale_initial_config);
@@ -63,6 +75,35 @@ vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial
 * If current value of parent is already greater than added value, will take the larger value 
 */
 void PropagateValueUpParents(vector<DLANode>* dla_configuration, int child_node_index);
+
+
+
+/*
+* Creates vector of "tiles" that represent 2D subsections of the entire dla configuration's dimension space.
+* 
+* Within each tile are the indicies of the nodes relative to the given dla_configuration. 
+* 
+* The tiles are organized in row major order. Meaning tiled 0 takes up the top left corner of the configuration grid. 
+* 
+* If spatial_tile_dimension = 1/2 config_grid dimension, there would be 4 tiles total in the vector.
+* |0 1|
+* |2 3|
+*/
+vector<vector<int>> BuildDLASpatialLookupTable(vector<DLANode> dla_configuration, int config_grid_dimension, int spatial_tile_dimensions);
+
+
+
+//could change this to short[4] instead of int[4] i mean no way we will make an image 2mil across lol 
+vector<DLALine> BuildDLALineConfiguration(vector<DLALine>* initial_dla_line_configuration);
+
+
+vector<DLALine> UpscaleDLALineConfiguration(vector<DLALine> dla_line_configuration, double upscale_factor);
+
+
+vector<DLANode> BuildDLANodesFromLineConfiguration(vector<DLALine> dla_line_configuration);
+
+
+
 
 
 //Does this node inside the configuration exist inside a cycle?
