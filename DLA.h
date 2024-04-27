@@ -19,7 +19,7 @@ uchar* GenerateRandomImage(int image_height, int image_width);
 
 
 struct DLANode {
-	uchar val;
+	ushort val;
 	int x_pos;
 	int y_pos;
 	int parent_connection_idx; //contains an list/vector index corresponding to the DLANode that this node is attached to. (-1 would be root node) 
@@ -49,10 +49,7 @@ struct DLALine {
 * This version of the algorithm utilizes collision attachment to attaches node together (other version is Sticky Attachment) 
 * 
 */
-vector<DLANode> DEPRRunDLA_CollisionAttachment(int grid_dimension, float fill_threshold_percentage, vector<DLANode>* initial_configuration, int starting_config_dimensions, bool should_upscale_initial_config);
-
-
-vector<DLANode> RunDLA_CollisionAttachment(int grid_dimension, float fill_threshold_percentage, vector<DLANode>* initial_configuration, vector<DLALine>* initial_line_configuration, int starting_config_dimensions, bool should_upscale_initial_config);
+vector<DLANode> RunDLA_CollisionAttachment(int grid_dimension, float fill_threshold_percentage, vector<DLANode>* initial_configuration, int starting_config_dimensions, bool should_upscale_initial_config);
 
 
 
@@ -63,8 +60,10 @@ vector<DLANode> RunDLA_StickyAttachment(int grid_dimension, float fill_threshold
 //Helper function used to upscale a given DLAConfiguration to the appropraite new grid dimension
 * 
 * Attempts to maintain the configuration's shape but increase the amount of nodes to match the increase in grid dimension.
+* 
+* Returns a tuple containing the resulting configuration after upscaling, and an accompanying Spatial tiling lookup grid that knows the neighborhood of each node (tiling size determiend by parameter) 
 */
-vector<DLANode> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial_configuration, int starting_config_dimensions);
+tuple<vector<DLANode>, vector<vector<int>>> DLAUpscalingAlg(int new_grid_dimension, vector<DLANode>* initial_configuration, int starting_config_dimensions, int tile_size);
 
 
 
@@ -90,6 +89,15 @@ void PropagateValueUpParents(vector<DLANode>* dla_configuration, int child_node_
 * |2 3|
 */
 vector<vector<int>> BuildDLASpatialLookupTable(vector<DLANode> dla_configuration, int config_grid_dimension, int spatial_tile_dimensions);
+
+
+/*
+* Given some node with an x,y position and an index corresponding to its location within a DLA configuration list, 
+* assign it to the appropriate spatial tile among a table that encompasses it's neighborhood. 
+* Grid dimensions = size of the working space that the node could be (image size)
+* Tile size = size of each tile 
+*/
+void AddNodeToTable(DLANode node, int node_index_inside_config, vector<vector<int>>* existing_spatial_tiling_table, int grid_dimensions, int tile_size);
 
 
 
@@ -127,6 +135,8 @@ uchar* DLAConfigToPixels(vector<DLANode>* dla_configuration, int grid_dimension)
 cv::Mat DLAConfigToCVMAT(vector<DLANode>* dla_configuration, int grid_dimension);
 
 
+cv::Mat CVMAT_OuterBias(cv::Mat image, int image_dim);
+
 
 /* 
 * //Directly upscales a dla image to the specified upscale dimension using opencv (square images only)
@@ -139,9 +149,12 @@ cv::Mat UpscaleAndBlurDLAImage(cv::Mat crisp_dla_pixel_image, int pixel_image_di
 //returns the index within the list where the DLANode was found (returns -1 if not found)
 *
 * makes search comparison based on (x,y) coordinates of the DLANode
+* 
+* (if tiling is present it will use that for search instead)
 */
 int FindDLANodeInList(DLANode node, vector<DLANode>* dla_configuration_list);
 
+int FindDLANodeInListUsingTileLookup(DLANode node, vector<DLANode>* dla_configuration_list, vector<vector<int>>* dla_spatial_tiling_lookup_grid, int grid_dimension, int tile_size);
 
 
 
